@@ -1,0 +1,236 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: 'AWS CloudFormation EMR Sample Template:
+  Create a Fault Tolerant EMR cluster with Instance Groups to be used with autoscaling and SPOT instances.
+
+  **WARNING** You will be billed for the AWS resources used if you create a stack from this template.'
+
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Project
+        Parameters:
+          - Project
+          - Artifacts
+
+      - Label:
+          default: EMR Topology
+        Parameters:
+          - Subnet
+          - KeyName
+          - emrRelease
+          - MasterInstanceType
+          - CoreInstanceType
+          - CoreInstanceCount
+          - IdleTimeout
+
+      - Label:
+          default: Trino Configuration
+        Parameters:
+          - ExchangeBuckets
+
+    ParameterLabels:
+
+      KeyName:
+        default: 'SSH Key Name'
+      emrRelease:
+        default: 'Release'
+
+      MasterInstanceType:
+        default: 'Master Instance Type'
+      CoreInstanceType:
+        default: 'CORE Instance Type'
+      CoreInstanceCount:
+        default: 'CORE Instance Number'
+
+      ExchangeBuckets:
+        default: 'Exchange Path'
+
+Parameters:
+
+  Project:
+    Type: String
+    Description: Value of the `Project` tag attached to each resource
+    Default: aws-emr
+  Artifacts:
+    Type: String
+    Description: S3 Bucket Name where artifacts are stored e.g. MY_BUCKET_NAME
+
+  Subnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet where the cluster is launched
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 private Key to access the EMR cluster using SSH connection
+
+  MasterInstanceType:
+    Type: String
+    Default: r5.2xlarge
+    AllowedValues:
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+  CoreInstanceType:
+    Type: String
+    Default: m5.4xlarge
+    AllowedValues:
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.8xlarge
+      - m6g.4xlarge
+      - m6g.8xlarge
+      - r5.4xlarge
+      - r5.8xlarge
+
+  CoreInstanceCount:
+    Type: Number
+    Default: 2
+    Description: Number CORE nodes to launch
+
+  emrRelease:
+    Type: String
+    Default: emr-6.9.0
+    Description: EMR release version
+    AllowedValues:
+      - emr-6.9.0
+
+  IdleTimeout:
+    Type: Number
+    Default: 86400
+    Description: Amount of idle time in seconds after which the cluster automatically terminates. You can specify a minimum of 60 seconds and a maximum of 604800 seconds (seven days)
+
+  ExchangeBuckets:
+    Type: String
+    Description: Amazon S3 buckets for data spooling. Can define multiple buckets comma separated e.g. s3://BUCKET_1,s3://BUCKET_2
+
+Resources:
+
+  EmrEc2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+
+  TrinoAutoscalingPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: TrinoAutoscalingPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - elasticmapreduce:AddInstanceGroups
+              - elasticmapreduce:ListInstanceGroups
+              - elasticmapreduce:ModifyInstanceGroups
+            Resource:
+              - '*'
+      Roles:
+        - !Ref EmrEc2Role
+
+  EMRInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref 'EmrEc2Role'
+
+  TrinoCluster:
+    Type: 'AWS::EMR::Cluster'
+    Properties:
+      Name: !Sub ${Project}/emr-trino
+      ReleaseLabel: !Ref emrRelease
+      VisibleToAllUsers: true
+      JobFlowRole: !Ref EMRInstanceProfile
+      ServiceRole: 'EMR_DefaultRole'
+      Applications:
+        - Name: Hadoop
+        - Name: Trino
+      AutoTerminationPolicy:
+        IdleTimeout: !Ref IdleTimeout
+      LogUri: !Sub s3://aws-logs-${AWS::AccountId}-${AWS::Region}/elasticmapreduce/
+      Tags:
+        - Key: Project
+          Value: !Ref Project
+        - Key: Name
+          Value: !Sub ${Project}/emr-node
+      Instances:
+        Ec2KeyName: !Ref KeyName
+        Ec2SubnetId: !Ref Subnet
+        KeepJobFlowAliveWhenNoSteps: true
+        MasterInstanceGroup:
+          InstanceCount: 1
+          InstanceType: !Ref MasterInstanceType
+        CoreInstanceGroup:
+          InstanceType: !Ref CoreInstanceType
+          InstanceCount: !Ref CoreInstanceCount
+
+      Configurations:
+
+        ##################################################################
+        # Trino Configurations
+        ##################################################################
+        - Classification: trino-config
+          ConfigurationProperties:
+
+            # Graceful decommissioning time (1 minute)
+            graceful-shutdown-timeout: 60s
+
+            # Fault Tolerant Execution
+            fault-tolerant-execution-target-task-input-size: '4GB'
+            fault-tolerant-execution-target-task-split-count: '64'
+            fault-tolerant-execution-task-memory: '5GB'
+            query.low-memory-killer.delay: '0s'
+            query.remote-task.max-error-duration: '1m'
+            retry-policy: 'TASK'
+
+            # General Properties
+            join-distribution-type: PARTITIONED
+
+            # Resource Management Properties
+            query.execution-policy: phased
+            query.max-execution-time: 120m
+            query.max-length: 2000000
+
+        # Fault Tolerant Execution
+        - Classification: trino-exchange-manager
+          ConfigurationProperties:
+            exchange.base-directories: !Ref ExchangeBuckets
+
+        # Glue Data Catalog Connector
+        - Classification: trino-connector-hive
+          ConfigurationProperties:
+            hive.metastore: glue
+
+        # TPCDS Connector for benchmark
+        - Classification: trino-connector-tpcds
+          ConfigurationProperties:
+            connector.name: tpcds
+
+
+#===============================================================================
+# EMR steps
+#===============================================================================
+  EmrStepInstallAutoscale:
+    Type: AWS::EMR::Step
+    Properties:
+      Name: 'Install Trino Autoscale'
+      ActionOnFailure: CONTINUE
+      JobFlowId: !Ref TrinoCluster
+      HadoopJarStep:
+        Jar: !Sub "s3://${AWS::Region}.elasticmapreduce/libs/script-runner/script-runner.jar"
+        Args:
+          - !Sub s3://${Artifacts}/artifacts/aws-emr-trino-autoscaling/emr-install_autoscale.sh
+          - !Ref Artifacts

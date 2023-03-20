@@ -1,0 +1,7 @@
+.bsp
+.idea
+benchmark-tools/
+**/target
+**/.DS_Store
+htmlReport/
+app/
