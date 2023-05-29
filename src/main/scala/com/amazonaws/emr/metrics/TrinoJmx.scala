@@ -1,5 +1,6 @@
 package com.amazonaws.emr.metrics
 
+import com.amazonaws.emr.TrinoAutoscaler.system
 import com.amazonaws.emr.metrics.models._
 
 import scala.concurrent.Future
@@ -18,7 +19,15 @@ trait TrinoJmx {
   /** Retrieve the number of Trino required_workers */
   def getRequiredWorkers: Future[ClusterSizeMonitor]
 
-  /** Retrieve statistics for any running query on the cluster */
-  def getQueriesRunning: Future[List[TrinoQuery]]
+}
 
+object TrinoJmx {
+  def apply(name: String): TrinoJmx = {
+    name.toLowerCase() match {
+      case "emr" => new TrinoJmxEmr()
+      case "rest" => new TrinoJmxRest()
+      case _ =>
+        throw new IllegalArgumentException("Invalid trino.jmx.impl configuration. Allowed values [emr, rest]")
+    }
+  }
 }

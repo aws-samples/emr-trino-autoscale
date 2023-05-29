@@ -7,14 +7,18 @@ import com.amazonaws.services.elasticmapreduce.model.DescribeClusterRequest
 import com.typesafe.config.ConfigFactory
 import org.json4s.native.JsonMethods._
 
+import java.io.File
+import java.net.InetAddress
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.io.Source
 import scala.language.postfixOps
+import scala.util.Try
 
 object Config {
 
   private val config = ConfigFactory.load()
+  private val trinoConf = ConfigFactory.parseFile(new File("/etc/trino/conf/config.properties"))
   private val JobFlowJson = "/emr/instance-controller/lib/info/job-flow.json"
 
   // =======================================================================
@@ -26,15 +30,15 @@ object Config {
   val EmrClusterId: String = if (isEmrMaster) getStringFromJson(JobFlowJson) else clusterID
 
   // Retrieve Master Public IP using SDK if cluster ID is defined (mainly for testing)
-  // Otherwise use localhost
-  private val EmrClusterPrimary: String = if (isNotEmrMaster) {
+  // Otherwise we return the FQDN of the host
+  val EmrClusterPrimary: String = if (isNotEmrMaster) {
     val retryPolicy = RetryPolicy.builder().withMaxErrorRetry(Config.AwsSdkMaxRetry).build()
     val clientConf = new ClientConfiguration().withRetryPolicy(retryPolicy)
     val client = AmazonElasticMapReduceClientBuilder.standard().withClientConfiguration(clientConf).build
     val request = new DescribeClusterRequest().withClusterId(clusterID)
     val response = client.describeCluster(request)
     response.getCluster.getMasterPublicDnsName
-  } else "127.0.0.1"
+  } else InetAddress.getLocalHost.getCanonicalHostName
 
   val EmrAutoIdleTerminationFile = "/emr/metricscollector/isbusy"
 
@@ -50,9 +54,13 @@ object Config {
   // =======================================================================
   val TrinoUser: String = config.getString("trino.user")
   val TrinoPassword: String = config.getString("trino.password")
-  val TrinoRestSchema: String = config.getString("trino.rest.schema")
-  val TrinoServerPort: String = config.getString("trino.port")
+
+  // check if is running on http or https
+  val isTrinoHttps = Try(trinoConf.getBoolean("http-server.https.enabled")).getOrElse(false)
+  val TrinoRestSchema = if (isTrinoHttps) "https" else "http"
+  val TrinoServerPort: String = if (isTrinoHttps) trinoConf.getString("http-server.https.port") else trinoConf.getString("http-server.http.port")
   val TrinoCoordinatorUrl = s"$TrinoRestSchema://$EmrClusterPrimary:$TrinoServerPort"
+  val TrinoJmxImpl: String = "emr"
 
   // =======================================================================
   // Instance Groups - Scaling configurations

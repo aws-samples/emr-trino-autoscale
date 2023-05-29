@@ -51,7 +51,7 @@ ExecStart=/usr/bin/trino-autoscale
 Restart=always
 RestartSec=5
 PIDFile=/var/run/trino/trino-autoscale.pid
-User=trino
+User=root
 WorkingDirectory=$INSTALL_PATH
 
 
@@ -105,7 +105,6 @@ EOF
 # Fix permissions
 chmod +x /usr/bin/trino-autoscale
 chmod oug+wrx /emr/metricscollector/isbusy
-chown trino:trino /emr/metricscollector/isbusy
 
 # Start service
 systemctl daemon-reload

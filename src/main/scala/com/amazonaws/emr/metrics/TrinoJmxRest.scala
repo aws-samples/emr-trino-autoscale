@@ -20,7 +20,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 
-class TrinoJmxApiRest(implicit val system: ActorSystem) extends TrinoJmx with Logging {
+class TrinoJmxRest(implicit val system: ActorSystem) extends TrinoJmx with Logging {
 
   private val JmxPath = "v1/jmx/mbean"
   private val QueryTimeout = 5.seconds
@@ -84,8 +84,9 @@ class TrinoJmxApiRest(implicit val system: ActorSystem) extends TrinoJmx with Lo
     } else internalIp
     /* END - Autoscaling using Public Dns Hostnames */
 
+
     val nodeStats = activeNodes.map { node =>
-      val nodeUrl = s"$TrinoRestSchema://$node:$TrinoServerPort/v1/jmx/mbean/java.lang:type=OperatingSystem"
+      val nodeUrl = s"$TrinoRestSchema://$node:$TrinoServerPort/$JmxPath/java.lang:type=OperatingSystem"
       getMBeanAttributes(nodeUrl).map { m =>
         //logger.debug(s"node:$node map: $m")
         if (m.isEmpty) None
@@ -100,17 +101,6 @@ class TrinoJmxApiRest(implicit val system: ActorSystem) extends TrinoJmx with Lo
       }
     }
     Future.sequence(nodeStats)
-  }
-
-  def getQueriesRunning: Future[List[TrinoQuery]] = {
-    Http().singleRequest(
-      HttpRequest(uri = s"$TrinoCoordinatorUrl/v1/query?state=running")
-        .withHeaders(basic(TrinoUser, TrinoPassword))
-    ).flatMap { response =>
-      Unmarshal(response).to[String].map { data =>
-        JsonMethods.parse(data).extract[List[TrinoQuery]]
-      }
-    }
   }
 
   def getRequiredWorkers: Future[ClusterSizeMonitor] = {

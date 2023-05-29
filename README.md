@@ -1,7 +1,6 @@
 # Amazon EMR - Trino Autoscale
 
 This project provides a custom auto-autoscaling for Amazon EMR on EC2 clusters running with Trino.
-The utility can be installed on external EC2 instances or on the Amazon EMR master of the cluster you want to control.
 The package support out of the box Instance Groups and Instance Fleets clusters with On Demand / SPOT instances.
 
 ## Features
@@ -14,10 +13,8 @@ The package support out of the box Instance Groups and Instance Fleets clusters 
 * Support for On Demand and SPOT instance types
 * Concurrent Scaling for Instance Groups clusters
 * EMR multi-master supported
-
-## Limitations
-
-* Kerberos and Apache Ranger integration not yet supported
+* Support EMR clusters with Kerberos 
+* Support EMR clusters with Trino Ranger plugin
 
 ## Documentation
 

@@ -13,10 +13,8 @@ The following provides details about the configurations that you can use to cont
 - **cw.namespace** (default: "AWS/EMR") CW namespace to publish metrics. When using the application outside the EMR master, you should use a different namespace than "AWS/EMR"
 
 ### Trino
-- **trino.port** (default: 8889) Default Trino port
 - **trino.user** (default: hadoop) Default Trino user used by autoscaler
 - **trino.password** (default: empty) Default Trino user password
-- **trino.rest.schema** (default: http) Default Trino REST schema
 
 ### Instance Groups - Scaling configurations
 - **scaling.ig.nodes.min** Minimum number of nodes provisioned for TASK Instance Groups
