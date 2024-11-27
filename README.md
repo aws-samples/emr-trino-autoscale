@@ -76,7 +76,7 @@ curl -L https://www.scala-sbt.org/sbt-rpm.repo > sbt-rpm.repo
 mv sbt-rpm.repo /etc/yum.repos.d/
 yum install -y git sbt java-11-amazon-corretto
 # clone repo
-git clone https://github.com/ripani-aws/trino-managed-scaling.git && cd trino-managed-scaling
+git clone https://github.com/aws-samples/emr-trino-autoscale.git && cd emr-trino-autoscale
 sh scripts/setup-artifact-bucket.sh MY_BUCKET_NAME
 ```
 
