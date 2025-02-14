@@ -37,6 +37,7 @@ Also, in order to perform scaling operations and create Instance Groups / Fleets
       "Sid": "autoscaling",
       "Effect": "Allow",
       "Action": [
+        "elasticmapreduce:DescribeCluster",
         "elasticmapreduce:AddInstanceFleet",
         "elasticmapreduce:ListInstanceFleets",
         "elasticmapreduce:ModifyInstanceFleet",
